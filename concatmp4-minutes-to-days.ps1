@@ -1,9 +1,10 @@
 # minutes -> day
+$day = "2021012*"
 
 $ffmpeg = "D:\Download\ffmpeg-20200729-cbb6ba2-win64-static\ffmpeg.exe"
 cd E:\camera\xiaomi_camera_videos\788b2ab6a8c1\
 
-$days = dir -Directory | where {$_.name -match "20210111*"} |% { $($_.basename).substring(0,8)}  | select -Unique
+$days = (dir -Directory -Filter $day -Name) | % {$_.substring(0,8)} | select -Unique
 
 $days | % {Write-Verbose -Verbose $_}
 
