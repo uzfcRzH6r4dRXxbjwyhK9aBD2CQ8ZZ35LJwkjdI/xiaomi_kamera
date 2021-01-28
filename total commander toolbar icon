@@ -1,0 +1,2 @@
+"C:\Program Files\PowerShell\7\pwsh.exe" -file e:\camera\xiaomi_camera_videos\args.ps1
+selected mp4 files will be joined together to the destination folder as output.mp4
