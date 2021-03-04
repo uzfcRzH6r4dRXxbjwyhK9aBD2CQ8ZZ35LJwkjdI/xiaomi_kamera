@@ -1,29 +1,90 @@
 # minutes -> day
-$day = "2021012*"
+$ffmpeg = "c:\ffmpeg\ffmpeg.exe"
 
-$ffmpeg = "D:\Download\ffmpeg-20200729-cbb6ba2-win64-static\ffmpeg.exe"
-cd E:\camera\xiaomi_camera_videos\788b2ab6a8c1\
+$source_folder = "C:\SHARED\xiaomi_camera_videos"
+# $source_folder = "c:\SHARED\1\"
+$dest_folder = "C:\shared\GoogleBackup"
+$delete_folder = "C:\SHARED\to_be_deleted"
 
-$days = (dir -Directory -Filter $day -Name) | % {$_.substring(0,8)} | select -Unique
 
-$days | % {Write-Verbose -Verbose $_}
+$script_folder = Split-Path -parent $MyInvocation.MyCommand.Path
+cd $script_folder
+
+
+$today = get-date -format yyyyMMdd
+write-verbose "Today = $today"
+$days = dir $source_folder -rec -Directory  | where {$_.name -lt $today} | % { ($_.fullname).substring(0,$_.FullName.Length-2)}  | select -Unique
+
+
+$days | % {Write-Verbose -Verbose "$(get-date) | $_"}
 
 foreach ($aday in $days)
 {
 
     Write-Verbose $aday
-    if (($dailyvideos = (dir "$aday*" -Directory).count) -ge 1)
-    {
-        Write-Verbose -Verbose "**************** Processing $aday *********************"
-        dir -Recurse "$($aday)*" | sort -pro fullname | % {"file $(($_.fullname).replace('\','/'))"}  | &$ffmpeg -protocol_whitelist file,pipe -f concat -safe 0 -i - -c:v copy -c:a aac "..\$($aday).mp4"    
+
+    Write-Verbose -Verbose "$(get-date) | **************** Processing $aday *********************"
+    write-verbose -verbose "getting files"
+    $allvideos = dir -Recurse "$($aday)*" | where {$_.Length -gt 0} | sort -pro fullname | % {$_.fullname}
+    write-verbose -verbose "$(get-date) | checking for corrupt video files"
+    $goodvideos = @()
+    $allvideos | % {
+        & $ffprobe -i $_ -loglevel quiet
+        if ($lastexitcode)
+        {
+            write-verbose -verbose "$(get-date) | Corrupt video file: $_"
+        }
+        else {$goodvideos += $_}
     }
-    else
-    {
-        Write-Warning "$aday has only $dailyvideos folder(s) which is less than 24 (day is not complete yet)."
-    }
+    write-verbose -verbose "$(get-date) | All videos: $($allvideos.count)"
+    write-verbose -verbose "$(get-date) | Good videos: $($goodvideos.count)"
+    write-verbose -verbose "$(get-date) | Bad videos: $($allvideos.count - $goodvideos.count)"
+
+    write-verbose -verbose "$(get-date) | massaging file names for ffmpeg list"
+    $ffmpeglist = $goodvideos | % {"file $($_.replace('\','/'))"}  
+    # $minutevideos | % {write-verbose -Verbose $_}
     
+    $filename = split-path -Path $aday -Leaf
+    $filename = $filename.substring(0,4) + "." + $filename.substring(4,2) + "." + $filename.substring(6,2)
+    Write-Verbose -Verbose "$(get-date) | Filename = $filename"
+
+    $kamera = split-path -path (split-path -Path $aday) -Leaf
+    switch ($kamera)
+    {
+        "788b2aab82a9" {$kamera = "macskamera2";break}
+        "788b2ab6a8c1" {$kamera = "macskamera1";break}
+        "788b2ab6b647" {$kamera = "macskamera3";break}
+        "788b2ab6be5c" {$kamera = "macskamera4";break}
+        default {}
+    }
+    Write-Verbose -Verbose "$(get-date) | kamera = $kamera"
+
+    $ffmpeglist | % {write-verbose -verbose "$(get-date) | $_" }
+    write-verbose -verbose "Starting ffmpeg work."
+    $ffmpeglist | &$ffmpeg -protocol_whitelist file,pipe -f concat -safe 0 -i - -c:v copy -c:a aac "$dest_folder\$filename-$kamera.mp4" -y  -hide_banner -loglevel error -nostats
+    $ffmpeg_result_code = $lastexitcode
+    Write-Verbose -Verbose "$(get-date) | ffmpeg exit code: $ffmpeg_result_code"
+ 
+    if ($ffmpeg_result_code -eq 0)
+    {
+            Write-Verbose -Verbose "No error from last ffmpeg command (lastexitcode = $ffmpeg_result_code)."
+        
+            $videofile = dir "$dest_folder\$filename-$kamera.mp4"
+            Write-Verbose "Filename: $($videofile.fullname), size: $($videofile.length)"
+        
+            if ($videofile.length -gt 5MB)
+            {
+                Write-Verbose -Verbose "File size -gt 5MB -> Deleting source files - $aday*..."
+                if (-NOT (Test-Path -Path "$delete_folder\$kamera\" -PathType Container)) {New-Item -Path "$delete_folder" -Name $kamera -ItemType Directory -Verbose}
+                Move-Item -Path $aday* -Destination "$delete_folder\$kamera\" -Verbose
+            }
+            else {write-verbose "$(get-date) | File size -lt 5MB, not deleting source files."}
+
+     }
+     else {write-verbose "$(get-date) | Error from last ffmpeg run (lastexitcode = $ffmpeg_result_code)."}
+
+
 
 }
 
 
-cd E:\camera\xiaomi_camera_videos\788b2ab6a8c1\
