@@ -12,7 +12,7 @@ cd $script_folder
 
 
 $today = get-date -format yyyyMMdd
-write-verbose "Today = $today"
+write-verbose -verbose "Today = $today"
 $days = dir $source_folder -rec -Directory  | where {$_.name -lt $today} | % { ($_.fullname).substring(0,$_.FullName.Length-2)}  | select -Unique
 
 
@@ -21,10 +21,10 @@ $days | % {Write-Verbose -Verbose "$(get-date) | $_"}
 foreach ($aday in $days)
 {
 
-    Write-Verbose $aday
+    Write-Verbose -verbose "working day: $aday"
 
     Write-Verbose -Verbose "$(get-date) | **************** Processing $aday *********************"
-    write-verbose -verbose "getting files"
+    write-verbose -verbose "$(get-date) | getting files"
     $allvideos = dir -Recurse "$($aday)*" | where {$_.Length -gt 0} | sort -pro fullname | % {$_.fullname}
     write-verbose -verbose "$(get-date) | checking for corrupt video files"
     $goodvideos = @()
@@ -59,32 +59,38 @@ foreach ($aday in $days)
     }
     Write-Verbose -Verbose "$(get-date) | kamera = $kamera"
 
-    $ffmpeglist | % {write-verbose -verbose "$(get-date) | $_" }
-    write-verbose -verbose "Starting ffmpeg work."
+    $ffmpeglist | % {write-debug "$(get-date) | $_" }
+    write-verbose -verbose "$(get-date) | Starting ffmpeg work."
     $ffmpeglist | &$ffmpeg -protocol_whitelist file,pipe -f concat -safe 0 -i - -c:v copy -c:a aac "$dest_folder\$filename-$kamera.mp4" -y  -hide_banner -loglevel error -nostats
     $ffmpeg_result_code = $lastexitcode
     Write-Verbose -Verbose "$(get-date) | ffmpeg exit code: $ffmpeg_result_code"
+
+    $videofile = dir "$dest_folder\$filename-$kamera.mp4"
+    Write-Verbose -verbose "$(get-date) | Filename: $($videofile.fullname), size: $($videofile.length)"
  
     if ($ffmpeg_result_code -eq 0)
     {
-            Write-Verbose -Verbose "No error from last ffmpeg command (lastexitcode = $ffmpeg_result_code)."
+            Write-Verbose -Verbose "$(get-date) | No error from last ffmpeg command (lastexitcode = $ffmpeg_result_code)."
         
-            $videofile = dir "$dest_folder\$filename-$kamera.mp4"
-            Write-Verbose "Filename: $($videofile.fullname), size: $($videofile.length)"
-        
-            if ($videofile.length -gt 5MB)
+            if ($videofile.length -gt 5GB)
             {
-                Write-Verbose -Verbose "File size -gt 5MB -> Deleting source files - $aday*..."
+                Write-Verbose -Verbose "$(get-date) | File size -gt 5GB -> Deleting source files - $aday*..."
                 if (-NOT (Test-Path -Path "$delete_folder\$kamera\" -PathType Container)) {New-Item -Path "$delete_folder" -Name $kamera -ItemType Directory -Verbose}
                 Move-Item -Path $aday* -Destination "$delete_folder\$kamera\" -Verbose
+
+                # write-verbose -Verbose "$(get-date) | Starting motion detection on $($videofile.fullname)"
+                # c:\shared\DVR-Scan\dvr-scan.exe -i $($videofile.fullname) -so -df 2 2>$null
+                # write-verbose -Verbose "$(get-date) | Motion detection done."
             }
-            else {write-verbose "$(get-date) | File size -lt 5MB, not deleting source files."}
+            else {write-verbose -verbose "$(get-date) | File size -lt 5GB, not deleting source files."}
 
      }
-     else {write-verbose "$(get-date) | Error from last ffmpeg run (lastexitcode = $ffmpeg_result_code)."}
+     else {write-verbose -verbose "$(get-date) | Error from last ffmpeg run (lastexitcode = $ffmpeg_result_code)."}
 
 
 
 }
 
 
+
+# add dvr-scan step
